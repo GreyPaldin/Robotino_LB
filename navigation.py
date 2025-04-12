@@ -2,12 +2,11 @@ import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 
-
 class NavigationController:
     """Контроллер навигации с использованием нечеткой логики."""
 
-    OBSTACLE_THRESHOLD = 0.20  # Порог обнаружения препятствий
-    SENSOR_LIMIT = 0.41  # Максимальное расстояние сенсоров
+    OBSTACLE_THRESHOLD = 0.15  # Порог обнаружения препятствий
+    SENSOR_LIMIT = 0.42  # Максимальное расстояние сенсоров
 
     def __init__(self):
         # Инициализация входных переменных
@@ -29,6 +28,7 @@ class NavigationController:
 
     def _init_sensors(self, universe):
         """Инициализация сенсоров препятствий."""
+        #Тоже входные
         self.sensor_left_front = ctrl.Antecedent(universe, 'left_front')
         self.sensor_left_rear = ctrl.Antecedent(universe, 'left_rear')
         self.sensor_front = ctrl.Antecedent(universe, 'front')
@@ -38,7 +38,7 @@ class NavigationController:
         self.sensor_back_right = ctrl.Antecedent(universe, 'back_right')
 
     def _configure_membership(self):
-        """Настройка функций принадлежности."""
+        """Настройка функций принадлежности (фазификации)"""
         # Для позиции по X
         self.position_x['far_back'] = fuzz.trapmf(
             self.position_x.universe, [-2, -1.6, -0.12, -0.1]
@@ -78,8 +78,8 @@ class NavigationController:
                        self.sensor_front, self.sensor_right_front,
                        self.sensor_right_rear, self.sensor_back_left,
                        self.sensor_back_right]:
-            sensor['close'] = fuzz.trapmf(sensor.universe, [0, 0, 0.17, 0.20])
-            sensor['far'] = fuzz.trapmf(sensor.universe, [0.17, 0.20, 0.41, 0.41])
+            sensor['dangeros'] = fuzz.trapmf(sensor.universe, [0, 0, 0.17, 0.20])
+            sensor['safe'] = fuzz.trapmf(sensor.universe, [0.17, 0.20, 0.41, 0.41])
 
         # Для выходных скоростей
 
@@ -87,7 +87,7 @@ class NavigationController:
         self._configure_velocity(self.velocity_y, 'right', 'left')  # Для оси Y (Y- = right, Y+ = left)
 
     def _configure_velocity(self, var, neg_dir, pos_dir):
-        """Настройка функций принадлежности для скоростей"""
+        """Настройка функций принадлежности (фазификации) для скоростей"""
         # Отрицательное направление (X- или Y-)
         var[f'{neg_dir}_fast'] = fuzz.trapmf(var.universe, [-0.3, -0.3, -0.22, -0.2])
         var[f'{neg_dir}_med'] = fuzz.trapmf(var.universe, [-0.22, -0.2, -0.12, -0.1])
@@ -102,7 +102,7 @@ class NavigationController:
         var[f'{pos_dir}_fast'] = fuzz.trapmf(var.universe, [0.20, 0.22, 0.30, 0.30])
 
     def _create_rules(self):
-        """Создание системы правил."""
+        """Создание системы правил для линейного движения."""
         # Правила движения к цели
         self.goal_rules = [
             ctrl.Rule(self.position_x['far_back'], self.velocity_x['backward_fast']),
@@ -122,72 +122,72 @@ class NavigationController:
         self.obstacle_rules = self._create_obstacle_rules()
 
     def _create_obstacle_rules(self):
-        """Генерация правил для объезда препятствий с учетом новых направлений"""
+        """Создание системы прави для обхода преград"""
         return [
             # ======== ЛЕВЫЕ ПРЕПЯТСТВИЯ (Y+ сторона) ========
             # Двойное препятствие слева
             ctrl.Rule(
-                self.sensor_left_front['close'] &
-                self.sensor_left_rear['close'] &
-                self.sensor_right_front['far'] &
-                self.sensor_front['far'],
+                self.sensor_left_front['dangeros'] &
+                self.sensor_left_rear['dangeros'] &
+                self.sensor_right_front['safe'] &
+                self.sensor_front['safe'],
                 (self.velocity_x['forward_med'], self.velocity_y['right_med'])
             ),
 
             # Одиночное переднее левое
             ctrl.Rule(
-                self.sensor_left_front['close'] &
-                self.sensor_left_rear['far'] &
-                self.sensor_front['far'],
+                self.sensor_left_front['dangeros'] &
+                self.sensor_left_rear['safe'] &
+                self.sensor_front['safe'],
                 (self.velocity_x['forward_fast'], self.velocity_y['right_fast'])
             ),
 
             # ======== ПРАВЫЕ ПРЕПЯТСТВИЯ (Y- сторона) ========
             # Двойное препятствие справа
             ctrl.Rule(
-                self.sensor_right_front['close'] &
-                self.sensor_right_rear['close'] &
-                self.sensor_left_front['far'] &
-                self.sensor_front['far'],
+                self.sensor_right_front['dangeros'] &
+                self.sensor_right_rear['dangeros'] &
+                self.sensor_left_front['safe'] &
+                self.sensor_front['safe'],
                 (self.velocity_x['forward_med'], self.velocity_y['left_med'])
             ),
 
             # Одиночное переднее правое
             ctrl.Rule(
-                self.sensor_right_front['close'] &
-                self.sensor_right_rear['far'] &
-                self.sensor_front['far'],
+                self.sensor_right_front['dangeros'] &
+                self.sensor_right_rear['safe'] &
+                self.sensor_front['safe'],
                 (self.velocity_x['forward_fast'], self.velocity_y['left_fast'])
             ),
 
             # ======== ПЕРЕДНИЕ ПРЕПЯТСТВИЯ (X+) ========
             # Центральное препятствие
             ctrl.Rule(
-                self.sensor_front['close'] &
-                self.sensor_left_front['far'] &
-                self.sensor_right_front['far'],
+                self.sensor_front['dangeros'] &
+                self.sensor_left_front['safe'] &
+                self.sensor_right_front['safe'],
                 (self.velocity_x['backward_slow'], self.velocity_y['stop'])
             ),
 
             # Переднее + левое
             ctrl.Rule(
-                self.sensor_front['close'] &
-                self.sensor_left_front['close'],
+                self.sensor_front['dangeros'] &
+                self.sensor_left_front['dangeros'],
                 (self.velocity_x['backward_slow'], self.velocity_y['right_fast'])
             ),
 
             # ======== ЗАДНИЕ ПРЕПЯТСТВИЯ (X-) ========
             # Заднее левое
             ctrl.Rule(
-                self.sensor_back_left['close'] &
-                self.sensor_back_right['far'],
+                self.sensor_back_left['dangeros'] &
+                self.sensor_back_right['safe'],
                 (self.velocity_x['forward_fast'], self.velocity_y['right_med'])
             ),
 
             # Заднее правое
             ctrl.Rule(
-                self.sensor_back_right['close'] &
-                self.sensor_back_left['far'],
+                self.sensor_back_right['dangeros'] &
+                self.sensor_back_left['safe'],
                 (self.velocity_x['forward_fast'], self.velocity_y['left_med'])
             )
         ] + self._create_dynamic_rules()
@@ -197,20 +197,20 @@ class NavigationController:
         # Приоритет объезда при близкой цели
         ctrl.Rule(
             self.position_x['near_front'] &
-            self.sensor_left_front['close'],
+            self.sensor_left_front['dangeros'],
             (self.velocity_x['forward_slow'], self.velocity_y['right_med'])
         ),
 
         ctrl.Rule(
             self.position_y['near_left'] &
-            self.sensor_front['close'],
+            self.sensor_front['dangeros'],
             (self.velocity_x['backward_slow'], self.velocity_y['right_slow'])
         ),
 
         # Компенсация бокового смещения
         ctrl.Rule(
             (self.position_y['far_left'] | self.position_y['far_right']) &
-            self.sensor_front['far'],
+            self.sensor_front['safe'],
             (self.velocity_x['forward_med'], self.velocity_y['stop'])
         )
     ]
@@ -223,56 +223,6 @@ class NavigationController:
 
         self.obstacle_sim = ctrl.ControlSystemSimulation(self.obstacle_system)
         self.goal_sim = ctrl.ControlSystemSimulation(self.goal_system)
-
-    def calculate_velocity(self, dx, dy, *sensors):
-        """Вычисление скоростей движения."""
-        # Добавляем проверку входных данных
-        if len(sensors) != 7:
-            raise ValueError("Требуется 7 значений сенсоров")
-
-        sensor_data = {
-            'left_front': sensors[0],
-            'left_rear': sensors[1],
-            'front': sensors[2],
-            'right_front': sensors[3],
-            'right_rear': sensors[4],
-            'back_left': sensors[5],
-            'back_right': sensors[6]
-        }
-
-        # Добавляем логгирование
-        print(f"Данные сенсоров: {sensor_data}")
-
-        if self._has_obstacles(sensors):
-            return self._avoid_obstacles(dy, sensor_data)
-        return self._move_to_target(dx, dy)
-
-    def _has_obstacles(self, sensors):
-        """Проверка наличия препятствий."""
-        return any(s < self.OBSTACLE_THRESHOLD for s in sensors)
-
-    def _avoid_obstacles(self, dy, sensor_data):
-        """Расчет обхода препятствий."""
-        # Заменяем метод update на прямое присваивание
-        self.obstacle_sim.input['left_front'] = sensor_data['left_front']
-        self.obstacle_sim.input['left_rear'] = sensor_data['left_rear']
-        self.obstacle_sim.input['front'] = sensor_data['front']
-        self.obstacle_sim.input['right_front'] = sensor_data['right_front']
-        self.obstacle_sim.input['right_rear'] = sensor_data['right_rear']
-        self.obstacle_sim.input['back_left'] = sensor_data['back_left']
-        self.obstacle_sim.input['back_right'] = sensor_data['back_right']
-        self.obstacle_sim.input['position_y'] = dy
-        print("Активированные правила:", self.obstacle_sim.ctrl.rules)
-
-        try:
-            self.obstacle_sim.compute()
-            return (
-                self.obstacle_sim.output['velocity_x'],
-                self.obstacle_sim.output['velocity_y']
-            )
-        except Exception as e:
-            print(f"Ошибка расчета: {e}")
-            return 0.0, 0.0
 
     def _move_to_target(self, dx, dy):
         """Движение к цели."""
@@ -288,17 +238,73 @@ class NavigationController:
             print(f"Ошибка расчета: {e}")
             return 0.0, 0.0
 
+    def calculate_velocity(self, dx, dy, *sensors):
+        """Вычисление скоростей движения."""
+        # Проверка входных данных
+        if len(sensors) != 7:
+            raise ValueError("Требуется 7 значений сенсоров")
+
+        sensor_data = {
+            'left_front': sensors[0],
+            'left_rear': sensors[1],
+            'front': sensors[2],
+            'right_front': sensors[3],
+            'right_rear': sensors[4],
+            'back_left': sensors[5],
+            'back_right': sensors[6]
+        }
+
+        # Логирование (для отладки)
+        print(f"Данные сенсоров: {sensor_data}")
+
+        if self._has_obstacles(sensors):
+            return self._avoid_obstacles(dy, sensor_data)
+        return self._move_to_target(dx, dy)
+
     def _adjust_speeds(self, dx, dy, vx, vy):
         """Корректировка скоростей по главной оси."""
-        main_axis = max(abs(dx), abs(dy), 1e-6)
-        scale_factor = min(abs(dx), abs(dy)) / main_axis
 
+        main_axis = max(abs(dx), abs(dy), 1e-4) #определение наибольшего параметра
+        scale_factor = min(abs(dx), abs(dy)) / main_axis #Поправочный коэффициент
+
+        #Проверки на необхдимость корректровки скоростей
         if abs(dx) > abs(dy):
             vy *= scale_factor
         else:
             vx *= scale_factor
-
+        #обрезание массива, если есть слишком низкие или высокие уставки
         return (
             np.clip(vx, -0.3, 0.3),
             np.clip(vy, -0.3, 0.3)
         )
+
+    def _has_obstacles(self, sensors):
+        """Проверка наличия препятствий."""
+        return any(s < self.OBSTACLE_THRESHOLD for s in sensors)
+
+    def _avoid_obstacles(self, dy, sensor_data):
+        """Расчет обхода препятствий."""
+        # Замена метода update на прямое присваивание
+        self.obstacle_sim.input['left_front'] = sensor_data['left_front']
+        self.obstacle_sim.input['left_rear'] = sensor_data['left_rear']
+        self.obstacle_sim.input['front'] = sensor_data['front']
+        self.obstacle_sim.input['right_front'] = sensor_data['right_front']
+        self.obstacle_sim.input['right_rear'] = sensor_data['right_rear']
+        self.obstacle_sim.input['back_left'] = sensor_data['back_left']
+        self.obstacle_sim.input['back_right'] = sensor_data['back_right']
+        self.obstacle_sim.input['position_y'] = dy
+        print("Применяемые правила:", self.obstacle_sim.ctrl.rules)
+
+        try:
+            self.obstacle_sim.compute()
+            #Возврат результата обработки правил
+            return (
+                self.obstacle_sim.output['velocity_x'],
+                self.obstacle_sim.output['velocity_y']
+            )
+        except Exception as e:
+            print(f"Ошибка расчёта/работы: {e}")
+            return 0.0, 0.0
+
+
+
