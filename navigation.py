@@ -367,13 +367,13 @@ class NavigationController:
 
         self.obstacle_sim.input['position_y'] = dy
         self.obstacle_sim.input['position_x'] = dx
-        self.obstacle_sim.input['left_front'] = 40.0
-        self.obstacle_sim.input['left_rear'] = 40.0
-        self.obstacle_sim.input['front'] = 40.0
-        self.obstacle_sim.input['right_front'] = 40.0
-        self.obstacle_sim.input['right_rear'] = 40.0
-        self.obstacle_sim.input['back_left'] = 40.0
-        self.obstacle_sim.input['back_right'] = 40.0
+        self.obstacle_sim.input['left_front'] = 0.0
+        self.obstacle_sim.input['left_rear'] = 0.0
+        self.obstacle_sim.input['front'] = 0.0
+        self.obstacle_sim.input['right_front'] = 0.0
+        self.obstacle_sim.input['right_rear'] = 0.0
+        self.obstacle_sim.input['back_left'] = 0.0
+        self.obstacle_sim.input['back_right'] = 0.0
 
         self.obstacle_sim.input['left_front'] = sensor_data['left_front']
         self.obstacle_sim.input['left_rear'] = sensor_data['left_rear']
