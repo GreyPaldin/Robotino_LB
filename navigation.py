@@ -5,15 +5,15 @@ from skfuzzy import control as ctrl
 class NavigationController:
     """Контроллер навигации с использованием нечеткой логики."""
 
-    OBSTACLE_THRESHOLD = 0.15  # Порог обнаружения препятствий
+    OBSTACLE_THRESHOLD = 0.25  # Порог обнаружения препятствий
     SENSOR_LIMIT = 0.42  # Максимальное расстояние сенсоров
 
     def __init__(self):
-        # Инициализация входных переменных
+        # Инициализация входных переменн ых
         self.position_x = ctrl.Antecedent(np.arange(-2, 2, 0.01), 'position_x')
         self.position_y = ctrl.Antecedent(np.arange(-2, 2, 0.01), 'position_y')
 
-        # Инициализация сенсоров
+        #Инициализация сенсоров
         sensor_range = np.arange(0, self.SENSOR_LIMIT, 0.01)
         self._init_sensors(sensor_range)
 
@@ -79,7 +79,7 @@ class NavigationController:
                        self.sensor_right_rear, self.sensor_back_left,
                        self.sensor_back_right]:
             sensor['dangeros'] = fuzz.trapmf(sensor.universe, [0, 0, 0.17, 0.20])
-            sensor['safe'] = fuzz.trapmf(sensor.universe, [0.17, 0.20, 0.41, 0.41])
+            sensor['safe'] = fuzz.trapmf(sensor.universe, [0.17, 0.20, 0.42, 0.42])
 
         # Для выходных скоростей
 
@@ -189,7 +189,20 @@ class NavigationController:
                 self.sensor_back_right['dangeros'] &
                 self.sensor_back_left['safe'],
                 (self.velocity_x['forward_fast'], self.velocity_y['left_med'])
-            )
+            ),
+
+            #Новый блок правил для короба
+            ctrl.Rule(
+                 self.sensor_front['dangeros'] & self.sensor_right_rear['dangeros'] & self.sensor_left_rear['safe'],
+                 (self.velocity_x['stop'], self.velocity_y['left_fast'])
+            ),
+
+
+            ctrl.Rule(
+                self.sensor_front['dangeros'] & self.sensor_right_rear['safe'] & self.sensor_left_rear['dangeros'],
+                (self.velocity_x['stop'], self.velocity_y['right_fast'])
+            ),
+
         ] + self._create_dynamic_rules()
 
     def _create_dynamic_rules(self):
@@ -214,7 +227,6 @@ class NavigationController:
             (self.velocity_x['forward_med'], self.velocity_y['stop'])
         )
     ]
-
 
     def _init_control_systems(self):
         """Инициализация систем управления."""
@@ -244,6 +256,7 @@ class NavigationController:
         if len(sensors) != 7:
             raise ValueError("Требуется 7 значений сенсоров")
 
+        # Создание словаря с данными сенсоров
         sensor_data = {
             'left_front': sensors[0],
             'left_rear': sensors[1],
@@ -258,8 +271,10 @@ class NavigationController:
         print(f"Данные сенсоров: {sensor_data}")
 
         if self._has_obstacles(sensors):
-            return self._avoid_obstacles(dy, sensor_data)
-        return self._move_to_target(dx, dy)
+            vx, vy = self._avoid_obstacles(dy, dx, sensor_data)
+            return vx, vy  # Возвращаем вычисленные скорости
+        else:
+            return self._move_to_target(dx, dy)  # Возвращаем вычисленные скорости
 
     def _adjust_speeds(self, dx, dy, vx, vy):
         """Корректировка скоростей по главной оси."""
@@ -281,10 +296,85 @@ class NavigationController:
     def _has_obstacles(self, sensors):
         """Проверка наличия препятствий."""
         return any(s < self.OBSTACLE_THRESHOLD for s in sensors)
-
+    """
     def _avoid_obstacles(self, dy, sensor_data):
-        """Расчет обхода препятствий."""
-        # Замена метода update на прямое присваивание
+        print(f"Вызвана функция _avoid_obstacles с dy = {dy}")  # Проверка вызова функции
+    
+        # Убедитесь, что position_y всегда получает значение
+        print(f"Присваиваем position_y = {dy}")
+        self.obstacle_sim.input['position_y'] = dy
+    
+        # Проверка наличия ключей и присваивание значений сенсорам
+        if 'left_front' in sensor_data:
+            print(f"Присваиваем sensor_left_front = {sensor_data['left_front']}")
+            self.obstacle_sim.input['sensor_left_front'] = sensor_data['left_front']
+        else:
+            print("Ошибка: отсутствует ключ 'left_front' в sensor_data")
+            # Важно: присвойте значение по умолчанию или вернитесь из функции
+            self.obstacle_sim.input['sensor_left_front'] = 0.0  # Значение по умолчанию
+            # return # Или вернитесь из функции, если без значений сенсоров работа невозможна
+    
+        if 'left_rear' in sensor_data:
+            print(f"Присваиваем sensor_left_rear = {sensor_data['left_rear']}")
+            self.obstacle_sim.input['sensor_left_rear'] = sensor_data['left_rear']
+        else:
+            print("Ошибка: отсутствует ключ 'left_rear' в sensor_data")
+            self.obstacle_sim.input['sensor_left_rear'] = 0.0
+    
+        if 'front' in sensor_data:
+            print(f"Присваиваем sensor_front = {sensor_data['front']}")
+            self.obstacle_sim.input['sensor_front'] = sensor_data['front']
+        else:
+            print("Ошибка: отсутствует ключ 'front' в sensor_data")
+            self.obstacle_sim.input['sensor_front'] = 0.0
+    
+        if 'right_front' in sensor_data:
+            print(f"Присваиваем sensor_right_front = {sensor_data['right_front']}")
+            self.obstacle_sim.input['sensor_right_front'] = sensor_data['right_front']
+        else:
+            print("Ошибка: отсутствует ключ 'right_front' в sensor_data")
+            self.obstacle_sim.input['sensor_right_front'] = 0.0
+    
+        if 'right_rear' in sensor_data:
+            print(f"Присваиваем sensor_right_rear = {sensor_data['right_rear']}")
+            self.obstacle_sim.input['sensor_right_rear'] = sensor_data['right_rear']
+        else:
+            print("Ошибка: отсутствует ключ 'right_rear' в sensor_data")
+            self.obstacle_sim.input['sensor_right_rear'] = 0.0
+    
+        if 'back_left' in sensor_data:
+            print(f"Присваиваем sensor_back_left = {sensor_data['back_left']}")
+            self.obstacle_sim.input['sensor_back_left'] = sensor_data['back_left']
+        else:
+            print("Ошибка: отсутствует ключ 'back_left' в sensor_data")
+            self.obstacle_sim.input['sensor_back_left'] = 0.0
+    
+        if 'back_right' in sensor_data:
+            print(f"Присваиваем sensor_back_right = {sensor_data['back_right']}")
+            self.obstacle_sim.input['sensor_back_right'] = sensor_data['back_right']
+        else:
+            print("Ошибка: отсутствует ключ 'back_right' в sensor_data")
+            self.obstacle_sim.input['sensor_back_right'] = 0.0
+    
+        print("Вычисляем obstacle_sim...")
+        self.obstacle_sim.compute()
+    
+        print(f"velocity_x = {self.obstacle_sim.output['velocity_x']}, velocity_y = {self.obstacle_sim.output['velocity_y']}") #Вывод скоростей
+    
+        return self.obstacle_sim.output['velocity_x'], self.obstacle_sim.output['velocity_y']
+    """
+    def _avoid_obstacles(self, dy, dx, sensor_data):
+
+        self.obstacle_sim.input['position_y'] = dy
+        self.obstacle_sim.input['position_x'] = dx
+        self.obstacle_sim.input['left_front'] = 40.0
+        self.obstacle_sim.input['left_rear'] = 40.0
+        self.obstacle_sim.input['front'] = 40.0
+        self.obstacle_sim.input['right_front'] = 40.0
+        self.obstacle_sim.input['right_rear'] = 40.0
+        self.obstacle_sim.input['back_left'] = 40.0
+        self.obstacle_sim.input['back_right'] = 40.0
+
         self.obstacle_sim.input['left_front'] = sensor_data['left_front']
         self.obstacle_sim.input['left_rear'] = sensor_data['left_rear']
         self.obstacle_sim.input['front'] = sensor_data['front']

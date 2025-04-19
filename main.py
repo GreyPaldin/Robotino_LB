@@ -14,7 +14,7 @@ POINT_X = 0.5
 POINT_Y = 0.5
 
 #MAX_VELOCITY = 0.30
-MAX_VELOCITY = 0.20
+MAX_VELOCITY = 0.1
 MIN_VELOCITY = 0.05
 #=====Глобальные настройки=====
 
